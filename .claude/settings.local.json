@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth *)",
+      "Bash(python3 \"/private/tmp/claude-501/-Users-ashutoshbehera-Documents-Tech-Repo-github-projects-llm-engineering-playground/4a3fbb16-865b-400e-8650-7c017af64874/scratchpad/scaffold.py\")"
+    ]
+  }
+}
