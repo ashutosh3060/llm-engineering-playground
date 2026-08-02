@@ -2,7 +2,7 @@
 
 **Month 1 · Aug 2026** — Experiment with models, prompts, parameters, latency, and cost — and see the tradeoffs as numbers.
 
-> Depends on [`ai-core`](https://github.com/ashutoshbehera/ai-core) — the shared provider gateway, cost accounting, and evaluation primitives used across this portfolio.
+> Depends on [`ai-core`](https://github.com/ashutosh3060/ai-core) — the shared provider gateway, cost accounting, and evaluation primitives used across this portfolio.
 
 > **Status:** 🚧 Scaffolded. Implementation begins Aug 2026.
 > Sections 7 (Evaluation Results) and 8 (Demo) are filled in as the work lands — they are
@@ -94,7 +94,7 @@ What this project deliberately does **not** do, and why:
 ## Quickstart
 
 ```bash
-git clone https://github.com/ashutoshbehera/llm-engineering-playground.git
+git clone https://github.com/ashutosh3060/llm-engineering-playground.git
 cd llm-engineering-playground
 
 python -m venv .venv && source .venv/bin/activate
@@ -125,7 +125,7 @@ docs/              architecture · design-decisions · evaluation · cost-analys
 
 ---
 
-Part of a [6-month Product AI Engineer portfolio](https://github.com/ashutoshbehera) —
+Part of a [6-month Product AI Engineer portfolio](https://github.com/ashutosh3060) —
 `ai-core` · `llm-engineering-playground` · `enterprise-rag-platform` ·
 `multi-agent-ai-platform` · `llm-evaluation-platform` · `production-ai-assistant` ·
 `ai-model-router`
