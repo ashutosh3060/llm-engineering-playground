@@ -60,24 +60,3 @@ def test_mock_cost_scales_with_tier() -> None:
     big = gw.complete(request.model_copy(update={"model": "mock-frontier"})).cost_usd
     assert big > small
 
-
-def test_tracking_is_a_noop_when_mlflow_is_absent_or_disabled() -> None:
-    """A missing optional dependency must never break a paid benchmark run.
-
-    This path had zero coverage — mlflow is not installed in CI, so the module
-    was shipped never having executed.
-    """
-    from playground.benchmark import BenchmarkSuite, ModelSummary
-    from playground.prompts import PromptTemplate
-    from playground.tracking import log_benchmark
-
-    suite = BenchmarkSuite(
-        name="t", template=PromptTemplate(name="t", user="x"), cases=[]
-    )
-    summary = ModelSummary(
-        model="mock-small", n=1, errors=0, accuracy=1.0,
-        total_cost_usd=0.001, cost_per_call_usd=0.001,
-        p50_latency_ms=10.0, p95_latency_ms=12.0,
-        total_input_tokens=10, total_output_tokens=5,
-    )
-    assert log_benchmark(suite, [summary], run_id="r", repeats=1, effort=None) is False

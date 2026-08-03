@@ -25,8 +25,11 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10",
 ]
-# MLflow is heavy and only needed to mirror runs into an experiment tracker;
-# the SQLite store is the source of truth either way.
+# MLflow is heavy and only mirrors runs into an experiment tracker; the SQLite
+# store is the source of truth either way. Needs the full package, not
+# mlflow-skinny — the SQLAlchemy backend is required, because MLflow 3.x refuses
+# the legacy ./mlruns file store. On platforms without a `cryptography` wheel,
+# install with `pip install --prefer-binary -e ".[tracking]"`.
 tracking = ["mlflow>=2.14"]
 
 [project.scripts]

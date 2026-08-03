@@ -65,7 +65,7 @@ This makes that decision evidence-based and repeatable rather than a debate.
 | **Streamlit** | The audience is engineers evaluating models, not end users. A usable comparison UI in hours instead of days. |
 | **SQLite** | Every call's tokens, latency, and cost land somewhere queryable from day one. Schema is Postgres-portable. |
 | **Typer + Rich** | Benchmarks belong in a terminal and in CI, not only behind a UI. |
-| **MLflow** *(optional)* | Run-to-run comparison in a UI. An extra, not a dependency — a missing tracker must never break a paid benchmark. |
+| **MLflow** *(optional)* | Run-to-run comparison in a UI. An extra, not a dependency, and every failure inside it degrades to a logged warning — a tracking hiccup must never destroy a benchmark you already paid for. |
 | **ai-core** | Provider gateway, pricing table, cost accounting. This repo owns the experiment layer, not the transport layer. |
 
 ## 5. Design Decisions
@@ -263,6 +263,7 @@ for s in summaries:                    # cheapest first
 | `PLAYGROUND_STORE` | `./data/playground.db` | SQLite location |
 | `PLAYGROUND_REPEATS` | `5` | Default benchmark repeats |
 | `PLAYGROUND_MLFLOW` | `0` | Mirror runs into MLflow (needs the `tracking` extra) |
+| `MLFLOW_TRACKING_URI` | `sqlite:///<store_dir>/mlflow.db` | Override the tracking backend. The default is a SQLite database — MLflow 3.x rejects the legacy file store. |
 | `AI_CORE_DEFAULT_MODEL` | `claude-opus-5` | Model used when a request omits one |
 
 ## Repository Layout
