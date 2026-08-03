@@ -151,7 +151,7 @@ with tab_compare:
                 samples[model] = ok[0].text
 
         df = pd.DataFrame(rows).sort_values("$/call").reset_index(drop=True)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width='stretch', hide_index=True)
         if len(df) > 1:
             cheap, dear = df.iloc[0], df.iloc[-1]
             if cheap["$/call"] > 0:
@@ -265,9 +265,9 @@ with tab_lab:
                 )
                 .sort_values("cost_usd")
             )
-            st.dataframe(agg, use_container_width=True, hide_index=True)
+            st.dataframe(agg, width='stretch', hide_index=True)
             with st.expander("Raw cells"):
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.dataframe(df, width='stretch', hide_index=True)
 
 # ------------------------------------------------------------- cost analyzer
 
@@ -316,7 +316,7 @@ with tab_cost:
                         ]
                     ),
                     hide_index=True,
-                    use_container_width=True,
+                    width='stretch',
                 )
 
                 st.write(f"**Same usage across every tier** (at {scale:,} calls/month)")
@@ -330,7 +330,7 @@ with tab_cost:
                         {"model": mid, "tier": spec.tier, "monthly_usd": round(monthly, 2)}
                     )
                 tiers = pd.DataFrame(tier_rows).sort_values("monthly_usd")
-                st.dataframe(tiers, hide_index=True, use_container_width=True)
+                st.dataframe(tiers, hide_index=True, width='stretch')
                 if len(tiers) > 1 and tiers.iloc[0]["monthly_usd"] > 0:
                     saving = tiers.iloc[-1]["monthly_usd"] - tiers.iloc[0]["monthly_usd"]
                     st.success(
@@ -353,7 +353,7 @@ with tab_runs:
     else:
         st.dataframe(
             pd.DataFrame(runs)[["id", "kind", "label", "started_at", "n_results", "total_cost"]],
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
         )
         picked = st.selectbox("Inspect run", [r["id"] for r in runs])
@@ -374,7 +374,7 @@ with tab_runs:
                             "error",
                         ]
                     ],
-                    use_container_width=True,
+                    width='stretch',
                     hide_index=True,
                 )
 
@@ -382,7 +382,7 @@ with tab_runs:
         st.subheader("Spend by model")
         spend = store.spend_by_model()
         if spend:
-            st.dataframe(pd.DataFrame(spend), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(spend), width='stretch', hide_index=True)
 
     st.divider()
     st.subheader("Run a benchmark suite")
@@ -412,7 +412,7 @@ with tab_runs:
             bar.empty()
             st.dataframe(
                 pd.DataFrame([s.as_row() for s in summaries]),
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
             )
     else:
