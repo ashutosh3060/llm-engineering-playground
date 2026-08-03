@@ -3,7 +3,7 @@
 **Month 1 · Aug 2026** — Compare LLMs on quality, latency, and cost, and see the tradeoffs as numbers.
 
 > Depends on [`ai-core`](https://github.com/ashutosh3060/ai-core) — the shared provider
-> gateway, versioned cost accounting, and evaluation primitives used across this portfolio.
+> gateway, versioned cost accounting, and shared types used across this portfolio.
 
 **Runs with no API key.** An offline mock provider is built in, so `make install &&
 playground bench` works on a clean clone. Add `ANTHROPIC_API_KEY` when you want real numbers.
@@ -100,7 +100,41 @@ Grids grow multiplicatively and every cell is a paid call. Three axes of five va
 five repeats is 625 calls — easy to request by accident. `SweepTooLarge` fires above 200,
 counts repeats in the total, and names the real number.
 
-## 6. Trade-offs
+## 6. Prior Art
+
+This problem is solved, well, by mature tools. Anyone evaluating this repo should
+know that, and so should I.
+
+| Tool | Overlap with this project |
+|---|---|
+| **[Promptfoo](https://promptfoo.dev)** | Near-exact superset. YAML test cases, model comparison across providers, assertions including cost thresholds and latency limits, LLM-graded evals, CI integration, red teaming. 350k+ developers, 25%+ of the Fortune 500, and **being acquired by OpenAI as of March 2026**. |
+| **[LiteLLM](https://litellm.ai)** | Superset of `ai-core` and this repo's gateway. 140+ providers, per-key/team/org budgets, semantic caching, lowest-cost and auto routing. |
+| **[Langfuse](https://langfuse.com)**, **[Braintrust](https://braintrust.dev)**, **[Arize Phoenix](https://phoenix.arize.com)**, **[DeepEval](https://deepeval.com)** | Overlap the eval, tracing, and regression-testing surface, each from a different angle. |
+
+**If you need this in production, use Promptfoo.** It is more capable, better
+tested, and maintained by people who work on it full time. Nothing here is a
+reason to choose this over it.
+
+So why does this exist? Because the reasoning does not transfer by reading docs.
+Working out first-hand *why* latency has to be a percentile over repeats, *why*
+`tiktoken` silently corrupts Claude cost estimates, *why* a pricing table needs
+effective dates, and *why* a sweep needs a spend guard produces understanding that
+using a finished tool does not. The eleven ADRs in
+[`docs/design-decisions.md`](docs/design-decisions.md) are the actual output of this
+project; the tool is the thing that forced them to be answered.
+
+Two things here I have not seen elsewhere, offered as observations rather than
+claims of novelty:
+
+- **Pricing bands with effective dates.** Most cost trackers hold a current price
+  per model. This resolves the band that applied *when the request ran*, so a rate
+  change does not retroactively corrupt an earlier analysis, and an introductory
+  rate expires on schedule rather than silently persisting.
+- **The offline mock as a first-class provider.** The full application — API, UI,
+  benchmark harness, tests — runs with no API key, which makes the repo genuinely
+  clonable and the test suite genuinely hermetic.
+
+## 7. Trade-offs
 
 What this project deliberately does **not** do:
 
@@ -118,7 +152,7 @@ What this project deliberately does **not** do:
   Mitigated by labelling at every exit — CLI warning, UI banner, `SYNTHETIC` in the price
   note, and an explicit statement in `docs/evaluation.md`.
 
-## 7. Evaluation Results
+## 8. Evaluation Results
 
 > **Pending a live API key.** The harness is complete and verified end-to-end; the tables in
 > [`docs/evaluation.md`](docs/evaluation.md) are deliberately empty because filling them
@@ -140,11 +174,11 @@ point moves between the easy classification suite and the harder extraction suit
 does, that difference is the whole argument for per-workload model selection, and it is what
 Month 6's router acts on.
 
-## 8. Demo
+## 9. Demo
 
 > _2–4 minute walkthrough — to be recorded once real results are in._
 
-## 9. Future Improvements
+## 10. Future Improvements
 
 - Import the Month 4 evaluation platform as the quality scorer, so comparison tables carry
   real faithfulness and hallucination columns instead of label matching.
