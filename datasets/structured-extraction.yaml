@@ -1,0 +1,52 @@
+name: structured-extraction
+description: >
+  10 unstructured snippets that must be turned into JSON with a fixed key set.
+  Scored on whether the output parses and carries the required keys — a
+  structural check, not a semantic one. This is the workload where a small model
+  most often falls over, so it is the useful counterweight to the easy
+  classification suite.
+scorer: json
+max_tokens: 256
+
+template:
+  system: >
+    Extract the requested fields and respond with a single JSON object.
+    Output only the JSON — no prose, no code fences.
+  user: |
+    Extract these fields as JSON: name, email, company, plan.
+    Use null for anything not stated.
+
+    Text:
+    $text
+
+cases:
+  - id: e01
+    variables: {text: "Jane Doe (jane@acme.com) from Acme Corp wants the Enterprise plan."}
+    expected: [name, email, company, plan]
+  - id: e02
+    variables: {text: "Contact: rmartin@globex.io. Rachel Martin, Globex. Currently on Pro."}
+    expected: [name, email, company, plan]
+  - id: e03
+    variables: {text: "Sign up sam@initech.net for the free tier."}
+    expected: [name, email, company, plan]
+  - id: e04
+    variables: {text: "Priya Raman asked about pricing. No email given. Works at Hooli."}
+    expected: [name, email, company, plan]
+  - id: e05
+    variables: {text: "team@umbrella.co — Umbrella Ltd, evaluating Enterprise, contact is Tom Reed."}
+    expected: [name, email, company, plan]
+  - id: e06
+    variables: {text: "Downgrade request from Lin Wu, lin.wu@stark.com, Stark Industries, to Starter."}
+    expected: [name, email, company, plan]
+  - id: e07
+    variables: {text: "Anonymous trial signup, no details captured."}
+    expected: [name, email, company, plan]
+  - id: e08
+    variables: {text: "Carlos Diaz of Wayne Enterprises (cdiaz@wayne.com) renewed on Business."}
+    expected: [name, email, company, plan]
+  - id: e09
+    variables: {text: "Email nina@soylent.dev. She didn't say which plan or give a company."}
+    expected: [name, email, company, plan]
+  - id: e10
+    variables: {text: "Meeting with Ade Okafor, Tyrell Corp. ade@tyrell.com. Wants Enterprise + SSO."}
+    expected: [name, email, company, plan]

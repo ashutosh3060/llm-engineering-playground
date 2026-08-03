@@ -1,93 +1,157 @@
 # llm-engineering-playground
 
-**Month 1 · Aug 2026** — Experiment with models, prompts, parameters, latency, and cost — and see the tradeoffs as numbers.
+**Month 1 · Aug 2026** — Compare LLMs on quality, latency, and cost, and see the tradeoffs as numbers.
 
-> Depends on [`ai-core`](https://github.com/ashutosh3060/ai-core) — the shared provider gateway, cost accounting, and evaluation primitives used across this portfolio.
+> Depends on [`ai-core`](https://github.com/ashutosh3060/ai-core) — the shared provider
+> gateway, versioned cost accounting, and evaluation primitives used across this portfolio.
 
-> **Status:** 🚧 Scaffolded. Implementation begins Aug 2026.
-> Sections 7 (Evaluation Results) and 8 (Demo) are filled in as the work lands — they are
-> the point of the repository, not an afterthought.
+**Runs with no API key.** An offline mock provider is built in, so `make install &&
+playground bench` works on a clean clone. Add `ANTHROPIC_API_KEY` when you want real numbers.
 
 ---
 
 ## 1. Problem
 
-Teams pick a model by reputation and a prompt by intuition, then discover the cost and latency consequences in production. There is usually no artifact answering: for *this* workload, which model is good enough, how much does it cost per call, and what does the prompt change actually buy?
+Teams pick a model by reputation and a prompt by intuition, then discover the cost and
+latency consequences in production. There is usually no artifact answering the only
+question that matters: **for this specific workload, which model is good enough, what does
+it cost per call, and what did that prompt change actually buy?**
 
 ## 2. Business Value
 
-Model selection is one of the highest-leverage cost decisions in an AI product. Moving a classification workload from a frontier model to a small one can cut inference cost by 80% with no measurable quality loss — but only if you can measure it. This platform makes that decision evidence-based and repeatable instead of a debate.
+Model selection is one of the highest-leverage cost decisions in an AI product. Moving a
+classification workload from a frontier model to a small one can cut inference cost
+substantially with no measurable quality loss — but only if you can measure it. Without
+evidence the choice defaults to the biggest model, which is the expensive answer to a
+question nobody asked.
+
+This makes that decision evidence-based and repeatable rather than a debate.
 
 ## 3. Architecture
 
 ```
-  User
-    |
-  Streamlit UI  ── model comparison · prompt lab · token & cost analyzer
-    |
-  FastAPI       ── /complete  /compare  /count-tokens  /models  (SSE streaming)
-    |
-  ai_core.gateway
-    |
-    +--------------+--------------+
-    |              |              |
-Claude tiers   GPT models*   Open models*      (* if a key is configured)
-    |              |              |
-    +--------------+--------------+
-                   |
-    MLflow (experiments) + SQLite (per-request usage)
+                    ┌──────────────┐   ┌──────────────┐
+                    │ Streamlit UI │   │  playground  │
+                    │   (4 tabs)   │   │     CLI      │
+                    └──────┬───────┘   └──────┬───────┘
+                           └────────┬─────────┘
+                          ┌─────────▼─────────┐
+                          │  FastAPI gateway  │  /complete /compare /count-tokens
+                          └─────────┬─────────┘  /models /providers /runs /spend
+              ┌─────────────────────▼─────────────────────┐
+              │            playground.runtime             │
+              │  one gateway + one store for every entry  │
+              │  point, so "what's available" answers     │
+              │  the same everywhere                      │
+              └──────┬─────────────────────────┬──────────┘
+          ┌──────────▼──────────┐   ┌──────────▼──────────┐
+          │   ai_core.Gateway   │   │  playground.Store   │
+          │  provider registry  │   │  SQLite: runs +     │
+          │  + concurrent fanout│   │  results            │
+          └──────────┬──────────┘   └─────────────────────┘
+       ┌─────────────┼─────────────┐
+  Anthropic     OpenAI*       mock (offline)
+       └─────────────┴─────────────┘
+        ai_core: versioned pricing · cost accounting · token counting
+
+  * registered only when a key is present
 ```
 
 ## 4. Technology Choices
 
 | Technology | Why this one |
 |---|---|
-| **FastAPI** | Async, typed, and SSE streaming out of the box. The UI is one client of the API — not the only possible one. |
-| **Streamlit** | The audience is engineers evaluating models, not end users. Streamlit gets a usable comparison UI in hours instead of days. |
-| **MLflow** | Prompt/model/parameter sweeps are experiments. MLflow gives run comparison and artifact storage without building a results database. |
-| **ai-core** | Provider gateway, pricing table, and usage records. This repo owns the experiment layer, not the transport layer. |
+| **FastAPI** | Async, typed, SSE-capable. The UI is one client of the API — not the only possible one. |
+| **Streamlit** | The audience is engineers evaluating models, not end users. A usable comparison UI in hours instead of days. |
+| **SQLite** | Every call's tokens, latency, and cost land somewhere queryable from day one. Schema is Postgres-portable. |
+| **Typer + Rich** | Benchmarks belong in a terminal and in CI, not only behind a UI. |
+| **MLflow** *(optional)* | Run-to-run comparison in a UI. An extra, not a dependency — a missing tracker must never break a paid benchmark. |
+| **ai-core** | Provider gateway, pricing table, cost accounting. This repo owns the experiment layer, not the transport layer. |
 
 ## 5. Design Decisions
 
-### 1. Prompts are versioned by content hash, not filename
+Eleven ADRs in [`docs/design-decisions.md`](docs/design-decisions.md). The five that shape
+everything else:
 
-A prompt is an experimental variable. Hashing the rendered prompt means a run is always attributable to exactly the text that was sent, including whitespace changes that would otherwise silently invalidate a comparison.
+### Prompts are versioned by content hash, not filename
+A prompt is an experimental variable. Hashing the *rendered* text — deliberately
+whitespace-sensitive — means a run is always attributable to exactly the bytes that were
+sent. Filename-based versioning lets two runs claim to share a prompt while sending
+different text, and the failure is silent.
 
-### 2. Every request records tokens, latency, and cost — always
+### Token counts come from the provider, never `tiktoken`
+`tiktoken` is OpenAI's tokenizer. Against Claude it undercounts by roughly 15–20% on prose
+and more on code. Cost estimates built on it are wrong in a direction that only surfaces
+on the invoice.
 
-Cost is not a reporting feature bolted on later. If it is not recorded on every call from day one, the historical comparison you want in week 4 does not exist.
+### Cost comes from a versioned pricing table with effective dates
+Claude Sonnet 5's introductory rate lapses 2026-08-31. A hardcoded float would keep
+reporting the promotional price afterwards *and* retroactively corrupt earlier analysis.
+`price_at(model, date)` resolves the band that applied when the request ran. A test asserts
+the lapse, so the mechanism cannot rot unnoticed.
 
-### 3. Comparison runs are fanned out concurrently, then aligned
+### Latency is always p50/p95 over repeats, never a single sample
+One measurement is noise — cold starts and provider load move it by multiples. Quoting one
+would be indistinguishable from making it up. Everything reported is a nearest-rank
+percentile over ≥5 runs, from a single shared implementation.
 
-Sequential comparison inflates the latency numbers with queueing. Concurrent dispatch with per-request timing gives latency figures that reflect the provider, not the harness.
-
-### 4. Latency is reported as p50/p95 over repeats, not a single sample
-
-A single call's latency is noise. Anything quoted in the README is a distribution over at least 5 runs.
+### Sweeps refuse to run oversized grids
+Grids grow multiplicatively and every cell is a paid call. Three axes of five values with
+five repeats is 625 calls — easy to request by accident. `SweepTooLarge` fires above 200,
+counts repeats in the total, and names the real number.
 
 ## 6. Trade-offs
 
-What this project deliberately does **not** do, and why:
+What this project deliberately does **not** do:
 
-- Streamlit, not a production frontend. This is an internal engineering tool; the production UI work happens in Month 5.
-- MLflow runs locally against a file store. A tracking server is unnecessary for a single-operator experiment log and adds setup friction for anyone cloning the repo.
-- Quality scoring here is deliberately shallow (heuristics + spot LLM-judge). Rigorous scoring is Month 4's job; duplicating it here would fork the eval logic.
+- **Shallow quality scoring.** Deterministic scorers only — exact, label, JSON-structural,
+  numeric. LLM-as-judge with calibration, faithfulness, and regression gating is Month 4's
+  `llm-evaluation-platform`. Building a second version here would fork the logic and the
+  two would drift.
+- **Streamlit, not a production frontend.** No auth, no multi-user state. That work is
+  Month 5.
+- **MLflow against a local file store.** A tracking server adds setup friction for anyone
+  cloning the repo and buys nothing for a single operator.
+- **No response caching.** Repeating a benchmark re-pays for every call. Caching results by
+  default would mask genuine run-to-run variance, which is the thing being measured.
+- **Synthetic output can reach the UI.** The mock provider is the price of a keyless clone.
+  Mitigated by labelling at every exit — CLI warning, UI banner, `SYNTHETIC` in the price
+  note, and an explicit statement in `docs/evaluation.md`.
 
 ## 7. Evaluation Results
 
-> _To be populated during Aug 2026._
-> Real, measured numbers only — no estimates. See [`docs/evaluation.md`](docs/evaluation.md)
-> for methodology and [`docs/cost-analysis.md`](docs/cost-analysis.md) for the cost breakdown.
+> **Pending a live API key.** The harness is complete and verified end-to-end; the tables in
+> [`docs/evaluation.md`](docs/evaluation.md) are deliberately empty because filling them
+> requires real calls. Nothing is estimated or extrapolated — an empty table is more useful
+> than a fabricated one.
+
+Reproduce in two commands once a key is set (~450 calls, well under $1):
+
+```bash
+playground bench datasets/sentiment-classification.yaml \
+  -m claude-haiku-4-5,claude-sonnet-5,claude-opus-5 -r 5 -o docs/results-sentiment.md
+playground bench datasets/structured-extraction.yaml \
+  -m claude-haiku-4-5,claude-sonnet-5,claude-opus-5 -r 5 -o docs/results-extraction.md
+```
+
+The question these answer is not "which model scored highest" — that is known in advance
+and uninteresting. It is **where the cheap model stops being good enough**, and whether that
+point moves between the easy classification suite and the harder extraction suite. If it
+does, that difference is the whole argument for per-workload model selection, and it is what
+Month 6's router acts on.
 
 ## 8. Demo
 
-> _2–4 minute walkthrough — to be recorded at the end of Aug 2026._
+> _2–4 minute walkthrough — to be recorded once real results are in._
 
 ## 9. Future Improvements
 
-- Import the Month 4 evaluation platform as the quality scorer so comparison tables carry real faithfulness/accuracy columns.
-- Prompt-caching-aware cost modelling — show cost with and without cache hits, since that changes the model-choice calculus.
-- Batch-API cost mode for workloads that tolerate latency (50% cheaper on supported providers).
+- Import the Month 4 evaluation platform as the quality scorer, so comparison tables carry
+  real faithfulness and hallucination columns instead of label matching.
+- Prompt-caching-aware cost modelling — show cost with and without cache hits, since that
+  materially changes the model-choice calculus on long shared prefixes.
+- Batch-API cost mode for latency-tolerant workloads (50% cheaper on supported providers).
+- Async dispatch with a rate-limit-aware semaphore, for runs in the thousands of calls.
 
 ---
 
@@ -100,25 +164,98 @@ cd llm-engineering-playground
 python -m venv .venv && source .venv/bin/activate
 make install
 
-cp .env.example .env      # add ANTHROPIC_API_KEY (the only required key)
-python -m ai_core.probe   # confirm which providers are reachable
+playground probe                                      # works immediately — mock is built in
+playground bench datasets/sentiment-classification.yaml -r 3
 ```
 
-Everything except Anthropic is optional — the gateway registers a provider only when its key
-is present, and each view renders whatever is available.
+For real numbers:
+
+```bash
+cp .env.example .env    # add ANTHROPIC_API_KEY
+playground probe        # expect a green `anthropic` row
+```
+
+## Usage
+
+```bash
+playground probe                       # which providers are reachable
+playground models                      # registry with today's prices and availability
+playground bench <suite.yaml> -r 5     # run a benchmark suite
+playground spend                       # cumulative cost per model
+playground serve                       # FastAPI on :8000  (docs at /docs)
+playground ui                          # Streamlit on :8501
+```
+
+### The four UI tabs
+
+| Tab | Answers |
+|---|---|
+| **Comparison** | Which model should serve this prompt? |
+| **Prompt Lab** | Which prompt and parameter combination is best? |
+| **Cost Analyzer** | What does this prompt cost before I run it at scale? |
+| **Runs** | What have I already measured? |
+
+### API
+
+```bash
+curl -X POST localhost:8000/compare -H 'content-type: application/json' \
+  -d '{"prompt":"Explain prompt caching","repeats":3}'
+```
+
+`/complete` · `/complete/stream` · `/compare` · `/count-tokens` · `/models` · `/providers` ·
+`/runs` · `/runs/{id}` · `/spend`
+
+### As a library
+
+```python
+from playground.benchmark import BenchmarkSuite, run_benchmark
+from playground.runtime import build_gateway, get_store
+
+suite = BenchmarkSuite.from_yaml("datasets/sentiment-classification.yaml")
+run_id, summaries, _ = run_benchmark(
+    suite, ["claude-haiku-4-5", "claude-opus-5"],
+    gateway=build_gateway(), store=get_store(), repeats=5,
+)
+for s in summaries:                    # cheapest first
+    print(s.model, s.accuracy, s.cost_per_call_usd, s.p50_latency_ms)
+```
+
+## Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | — | The only key needed for real results |
+| `PLAYGROUND_ALLOW_MOCK` | `1` | Register the offline mock provider |
+| `PLAYGROUND_STORE` | `./data/playground.db` | SQLite location |
+| `PLAYGROUND_REPEATS` | `5` | Default benchmark repeats |
+| `PLAYGROUND_MLFLOW` | `0` | Mirror runs into MLflow (needs the `tracking` extra) |
+| `AI_CORE_DEFAULT_MODEL` | `claude-opus-5` | Model used when a request omits one |
 
 ## Repository Layout
 
 ```
-src/playground/    application code
-tests/             unit + integration tests
-docs/              architecture · design-decisions · evaluation · cost-analysis · future-roadmap
+src/playground/
+  config.py      env-driven settings
+  runtime.py     the one gateway + the one store, shared by API, CLI, and UI
+  mock.py        deterministic offline provider — why this runs without a key
+  prompts.py     templates, $-substitution, content-hash versioning
+  sweep.py       parameter grid expansion with a spend guard
+  scoring.py     deterministic scorers
+  benchmark.py   suite execution, repeats, aggregation
+  stats.py       nearest-rank percentile (one implementation, three callers)
+  store.py       SQLite: runs + results
+  tracking.py    optional MLflow mirror
+  api/           FastAPI app + schemas
+  ui/app.py      Streamlit, 4 tabs
+datasets/        benchmark suites (YAML)
+tests/           61 tests, green with zero API keys
+docs/            architecture · design-decisions · evaluation · cost-analysis · future-roadmap
 ```
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
-- [Design Decisions](docs/design-decisions.md)
+- [Design Decisions](docs/design-decisions.md) — 11 ADRs
 - [Evaluation](docs/evaluation.md)
 - [Cost Analysis](docs/cost-analysis.md)
 - [Future Roadmap](docs/future-roadmap.md)

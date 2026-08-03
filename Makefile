@@ -1,4 +1,4 @@
-.PHONY: install dev test lint fmt typecheck run clean
+.PHONY: install dev test lint fmt typecheck run api bench clean
 
 install:
 	python -m pip install -e ".[dev]"
@@ -20,7 +20,13 @@ typecheck:
 	mypy src
 
 run:
-	@echo "See README section 'Quickstart' for this project's run command."
+	playground ui
+
+api:
+	playground serve
+
+bench:
+	playground bench datasets/sentiment-classification.yaml -r 5
 
 clean:
 	rm -rf .pytest_cache .mypy_cache .ruff_cache build dist *.egg-info

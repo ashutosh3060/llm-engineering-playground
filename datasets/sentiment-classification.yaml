@@ -1,0 +1,77 @@
+name: sentiment-classification
+description: >
+  20 short customer-feedback snippets labelled positive / negative / neutral.
+  A deliberately easy workload — the point is to find out whether the cheapest
+  model is good enough, because if it is, routing this to a frontier model is
+  pure waste.
+scorer: label
+max_tokens: 16
+labels: [positive, negative, neutral]
+
+template:
+  system: >
+    You are a precise sentiment classifier. Respond with exactly one word:
+    positive, negative, or neutral. No punctuation, no explanation.
+  user: "Classify the sentiment of this customer feedback:\n\n$text"
+
+cases:
+  - id: c01
+    variables: {text: "The product quality is excellent and shipping was fast!"}
+    expected: positive
+  - id: c02
+    variables: {text: "Terrible customer service. I will never order from you again."}
+    expected: negative
+  - id: c03
+    variables: {text: "It arrived on Tuesday as scheduled."}
+    expected: neutral
+  - id: c04
+    variables: {text: "Honestly it's fine. Does the job, nothing special."}
+    expected: neutral
+  - id: c05
+    variables: {text: "I've been a customer for six years and this is the best release yet."}
+    expected: positive
+  - id: c06
+    variables: {text: "Third replacement unit and it still overheats. Unbelievable."}
+    expected: negative
+  - id: c07
+    variables: {text: "The interface is clean but the search is slow."}
+    expected: neutral
+  - id: c08
+    variables: {text: "Support resolved my issue in under ten minutes. Genuinely impressed."}
+    expected: positive
+  - id: c09
+    variables: {text: "Package showed up damaged, contents were fine."}
+    expected: neutral
+  - id: c10
+    variables: {text: "Charged me twice and nobody has responded in four days."}
+    expected: negative
+  - id: c11
+    variables: {text: "Does what it says on the box."}
+    expected: neutral
+  - id: c12
+    variables: {text: "Not bad at all, actually exceeded what I expected for the price."}
+    expected: positive
+  - id: c13
+    variables: {text: "I wanted to like it. I really did. It broke in a week."}
+    expected: negative
+  - id: c14
+    variables: {text: "Documentation could be better but the API works well."}
+    expected: neutral
+  - id: c15
+    variables: {text: "Absolutely delighted. Recommending this to my whole team."}
+    expected: positive
+  - id: c16
+    variables: {text: "Waited three weeks for a part that was listed as in stock."}
+    expected: negative
+  - id: c17
+    variables: {text: "Standard delivery, standard packaging, standard product."}
+    expected: neutral
+  - id: c18
+    variables: {text: "The onboarding flow is the smoothest I've used in this category."}
+    expected: positive
+  - id: c19
+    variables: {text: "Cancelled my subscription. The price increase wasn't justified."}
+    expected: negative
+  - id: c20
+    variables: {text: "Works offline, which is what I needed."}
+    expected: positive
