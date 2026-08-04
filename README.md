@@ -168,6 +168,12 @@ arithmetic (tokens × price), so it needs no API calls. Three findings, all repr
   `claude-haiku-4-5` needs 4,096. A prefix in between caches on the *expensive* model and not
   the cheap one, which can invert a tier gap that looks decisive on sticker price.
 
+**The harness is validated end-to-end** — 450 calls across both suites against the offline
+mock provider, exercising loading, rendering, concurrent dispatch, scoring, persistence,
+percentile aggregation, cost accounting, and MLflow mirroring. See
+[`docs/harness-validation.md`](docs/harness-validation.md). Those numbers are synthetic and
+live in a separate document so they cannot be mistaken for model results.
+
 > **Quality and latency remain pending a live API key.** The tables in
 > [`docs/evaluation.md`](docs/evaluation.md) are deliberately empty — you cannot know whether
 > the cheap model is good enough without running it. Nothing there is estimated or
@@ -307,7 +313,8 @@ docs/            architecture · design-decisions · evaluation · cost-analysis
 
 - [Architecture](docs/architecture.md)
 - [Design Decisions](docs/design-decisions.md) — 11 ADRs
-- [Evaluation](docs/evaluation.md)
+- [Evaluation](docs/evaluation.md) — empty pending a key
+- [Harness Validation](docs/harness-validation.md) — synthetic; proves the pipeline runs
 - [Cost Analysis](docs/cost-analysis.md)
 - [Future Roadmap](docs/future-roadmap.md)
 

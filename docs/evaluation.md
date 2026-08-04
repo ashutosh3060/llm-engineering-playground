@@ -2,6 +2,12 @@
 
 > **Status: awaiting a live API key.**
 >
+> The harness itself has been validated end-to-end against the offline mock provider —
+> 450 calls across both suites, every stage exercised. See
+> [`harness-validation.md`](harness-validation.md). Those numbers are synthetic and say
+> nothing about any real model; they are kept in a separate document precisely so they
+> can never be mistaken for the tables below.
+>
 > The harness is complete and verified end-to-end against the offline mock provider.
 > The tables below are **deliberately empty**, because filling them requires real API
 > calls and no provider key was configured when this was built. Nothing here is
