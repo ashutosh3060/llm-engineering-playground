@@ -154,10 +154,24 @@ What this project deliberately does **not** do:
 
 ## 8. Evaluation Results
 
-> **Pending a live API key.** The harness is complete and verified end-to-end; the tables in
-> [`docs/evaluation.md`](docs/evaluation.md) are deliberately empty because filling them
-> requires real calls. Nothing is estimated or extrapolated — an empty table is more useful
-> than a fabricated one.
+**Cost analysis is complete** — see [`docs/cost-analysis.md`](docs/cost-analysis.md). Cost is
+arithmetic (tokens × price), so it needs no API calls. Three findings, all reproducible with
+`playground cost`:
+
+- **95% of the extraction workload's cost is output tokens**, not prompt. Capping `max_tokens`
+  is the lever; shortening the prompt is nearly pointless. The instinct to optimise the prompt
+  first is wrong here, and invisible without decomposing the cost.
+- **Neither shipped workload can use prompt caching at all** — both prefixes (~30 tokens) sit
+  far below every model's minimum. The provider doesn't error, it just declines to cache. A
+  plan assuming a uniform "~90% caching discount" would be wrong by the entire saving.
+- **Cache minimums are not ordered by price.** `claude-opus-5` caches from 512 tokens;
+  `claude-haiku-4-5` needs 4,096. A prefix in between caches on the *expensive* model and not
+  the cheap one, which can invert a tier gap that looks decisive on sticker price.
+
+> **Quality and latency remain pending a live API key.** The tables in
+> [`docs/evaluation.md`](docs/evaluation.md) are deliberately empty — you cannot know whether
+> the cheap model is good enough without running it. Nothing there is estimated or
+> extrapolated; an empty table is more useful than a fabricated one.
 
 Reproduce in two commands once a key is set (~450 calls, well under $1):
 
@@ -214,7 +228,8 @@ playground probe        # expect a green `anthropic` row
 ```bash
 playground probe                       # which providers are reachable
 playground models                      # registry with today's prices and availability
-playground bench <suite.yaml> -r 5     # run a benchmark suite
+playground cost <suite.yaml> -n 10000  # unit economics — no API calls needed
+playground bench <suite.yaml> -r 5     # run a benchmark suite (needs a key)
 playground spend                       # cumulative cost per model
 playground serve                       # FastAPI on :8000  (docs at /docs)
 playground ui                          # Streamlit on :8501
@@ -278,12 +293,13 @@ src/playground/
   scoring.py     deterministic scorers
   benchmark.py   suite execution, repeats, aggregation
   stats.py       nearest-rank percentile (one implementation, three callers)
+  costmodel.py   keyless unit economics + prompt-cache modelling
   store.py       SQLite: runs + results
   tracking.py    optional MLflow mirror
   api/           FastAPI app + schemas
   ui/app.py      Streamlit, 4 tabs
 datasets/        benchmark suites (YAML)
-tests/           61 tests, green with zero API keys
+tests/           75 tests, green with zero API keys
 docs/            architecture · design-decisions · evaluation · cost-analysis · future-roadmap
 ```
 

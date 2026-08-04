@@ -1,90 +1,157 @@
 # Cost Analysis — llm-engineering-playground
 
-> **Status: unit economics pending a live key.** The pricing mechanics below are
-> implemented and tested; the measured per-workload figures need real calls.
+**Status: complete for cost. Quality and latency remain pending an API key.**
 
-## How costs are computed
+Cost is arithmetic — token count × price — so the entire cost analysis is
+computable with **zero API calls**. That is what this document contains. What it
+does *not* contain is whether the cheap model is good enough, which is a quality
+question and needs real calls (see [`evaluation.md`](evaluation.md)).
 
-Every cost comes from `ai-core`'s versioned pricing table, evaluated at the date the
-request ran — never from a hardcoded constant.
+> **Provenance.** Token counts below are **estimated** at ~4 characters/token,
+> because no provider key was configured. The arithmetic is exact *given* those
+> counts; the counts themselves are not. Set `ANTHROPIC_API_KEY` and re-run
+> `playground cost` to replace them with provider-exact figures — the command
+> labels which it used. Everything else here — prices, cache minimums, the shape
+> of the curves — is exact and unaffected.
 
-```python
-from datetime import date
-from ai_core import price_at
+Reproduce everything:
 
-price_at("claude-sonnet-5", date(2026, 8, 15))   # $2/$10 — introductory rate
-price_at("claude-sonnet-5", date(2026, 10, 1))   # $3/$15 — standard rate
+```bash
+playground cost datasets/sentiment-classification.yaml --calls 10000
+playground cost datasets/structured-extraction.yaml   --calls 10000
 ```
 
-That matters more than it sounds. Claude Sonnet 5 carries an introductory rate that
-expires 2026-08-31. A hardcoded float would keep reporting the promotional price into
-October and quietly understate the bill — and worse, would retroactively corrupt any
-cost analysis written before the change. The table records what a request actually
-cost at the time it ran. There is a test asserting the rate lapses on schedule.
+---
 
-## Cost drivers, ranked
+## Workload 1 — classification
 
-1. **Model tier.** The spread between the cheapest and most expensive Claude tier is
-   5x on input and 5x on output. No other lever comes close. This is why the project
-   exists.
-2. **Output tokens.** Output is priced 5x input across the Claude line. A prompt that
-   induces a verbose answer costs more than a longer prompt that induces a terse one —
-   counterintuitive, and worth measuring rather than assuming.
-3. **Cache hit rate.** Cache reads bill at ~0.1x base input; 5-minute writes at ~1.25x.
-   Break-even is two requests against the same prefix.
-4. **Effort level.** On models that support it, `effort` controls thinking depth and
-   therefore spend. It is the cost lever — not a token budget.
+Prompt shape: **33** token shared prefix, **25** variable, **16** output.
 
-## Reading the numbers correctly
-
-`usage.input_tokens` is the **uncached remainder**, not the prompt size. Full prompt
-size is `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`, exposed
-as `usage.total_prompt_tokens`.
-
-Misreading this is the most common way to conclude that caching is broken when it is
-working perfectly: `input_tokens` collapses toward zero on a cache hit precisely
-*because* the cache is doing its job.
-
-## Unit economics
-
-| Workload | Model | Input tok | Output tok | $/call | $/10k calls |
+| Model | Tier | $/call | Monthly @ 10k | Cache min | Cacheable |
 |---|---|---|---|---|---|
-| _pending a live key_ | | | | | |
+| `claude-haiku-4-5` | small | $0.000138 | **$1.38** | 4,096 | no |
+| `claude-sonnet-5` | balanced | $0.000276 | $2.76 | 1,024 | no |
+| `claude-opus-5` | frontier | $0.000690 | $6.90 | 512 | no |
+| `claude-opus-4-8` | frontier | $0.000690 | $6.90 | 1,024 | no |
 
-Produce these with the Cost Analyzer tab, or:
+## Workload 2 — structured extraction
 
-```bash
-playground bench datasets/sentiment-classification.yaml --repeats 5
-playground spend
-```
+Prompt shape: **29** token shared prefix, **41** variable, **256** output.
 
-## Optimizations to evaluate
+| Model | Tier | $/call | Monthly @ 10k | Cache min | Cacheable |
+|---|---|---|---|---|---|
+| `claude-haiku-4-5` | small | $0.001350 | **$13.50** | 4,096 | no |
+| `claude-sonnet-5` | balanced | $0.002700 | $27.00 | 1,024 | no |
+| `claude-opus-5` | frontier | $0.006750 | $67.50 | 512 | no |
+| `claude-opus-4-8` | frontier | $0.006750 | $67.50 | 1,024 | no |
 
-| Optimization | Expected effect | Measured |
+---
+
+## Findings
+
+### 1. Output tokens dominate — and the effect is workload-shaped
+
+Output is priced 5× input across the Claude line, so the split follows the
+`max_tokens` budget, not the prompt length:
+
+| Workload | Input tokens | Output tokens | Output share of cost |
+|---|---|---|---|
+| Classification | 58 | 16 | **58%** |
+| Extraction | 70 | 256 | **95%** |
+
+The ratio is identical on every tier, because the 5× multiplier is uniform.
+
+**Consequence:** for the extraction workload, shortening the prompt is close to
+pointless — 95% of the bill is output. Capping `max_tokens`, or prompting for
+terser output, is the lever that matters. This inverts the usual instinct to
+optimise the prompt first, and it is invisible unless you decompose the cost.
+
+### 2. Neither workload can use prompt caching at all
+
+Both prefixes (33 and 29 tokens) are far below every model's minimum cacheable
+length. The provider does not error — it simply declines to cache, returning
+`cache_creation_input_tokens: 0`. A cost plan that assumes a uniform "~90%
+caching discount" would be wrong by the entire saving on both of these.
+
+This is the most useful thing in this document, and it is a **negative** result:
+the optimisation everyone reaches for first does nothing here.
+
+### 3. Caching is a step function on prefix length, and the step differs 8× by model
+
+Saving at 10,000 calls, by shared-prefix length:
+
+| Prefix tokens | `opus-5` | `sonnet-5` | `opus-4-8` | `haiku-4-5` |
+|---|---|---|---|---|
+| 0 | — | — | — | — |
+| 256 | — | — | — | — |
+| **512** | **75%** | — | — | — |
+| **1,024** | 82% | **82%** | **82%** | — |
+| 2,048 | 86% | 86% | 86% | — |
+| **4,096** | 88% | 88% | 88% | **88%** |
+| 8,192 | 89% | 89% | 89% | 89% |
+
+Nothing happens until the prefix crosses the model's minimum; then the saving
+appears abruptly and climbs toward 90% as the write premium amortises.
+
+**The minimums are not ordered by price.** `claude-opus-5` — the most expensive
+model here — has the *lowest* threshold at 512 tokens, while `claude-haiku-4-5`
+— the cheapest — has the highest at 4,096. So a system prompt in the 512–4,096
+range caches on the frontier model and not on the small one, which can narrow or
+invert a tier gap that looks decisive on sticker price.
+
+**Consequence:** "which model is cheapest?" is not answerable from the price
+table alone once caching is in play. It depends on your prefix length.
+
+### 4. The tier spread is exactly 5.0× and is stable across workloads
+
+`claude-haiku-4-5` → `claude-opus-5` is 5× on both input and output, so the
+ratio holds regardless of prompt shape. That makes the quality question sharp
+and quantifiable: **for the classification workload, Opus 5 must be worth
+$5.52/month more per 10k calls than Haiku.** Whether it is cannot be answered
+here — it needs a benchmark run.
+
+### 5. Break-even on caching is the second call
+
+A single call costs *more* cached than uncached: it pays the 1.25× write premium
+and never reads the cache back. Two calls break even; the saving approaches 90%
+asymptotically. Relevant for low-volume or bursty workloads where a cache entry
+may expire (5-minute default TTL) before it is read.
+
+---
+
+## Optimizations, evaluated
+
+| Optimization | Applies here? | Effect |
 |---|---|---|
-| Tier downgrade (frontier → small) for classification | up to 5x cheaper | _pending_ |
-| Prompt caching on the shared system prompt | ~90% off the cached prefix after call 2 | _pending_ |
-| Lower `effort` on simple workloads | fewer thinking tokens | _pending_ |
-| Batch API for latency-tolerant runs | 50% on supported providers | _pending_ |
-| Tighter `max_tokens` on classification | caps runaway output | _pending_ |
+| Tier downgrade frontier → small | **Yes** | 5.0× cheaper. Quality cost unknown pending benchmark. |
+| Prompt caching | **No** | Both prefixes below every model's minimum. |
+| Reduce `max_tokens` | **Yes — biggest lever on extraction** | 95% of that workload's cost is output. |
+| Shorten the prompt | **Marginal** | 5% of extraction cost, 42% of classification. |
+| Batch API | Likely | 50% on supported providers; not modelled here. |
+| Lower `effort` | Untested | Needs real runs to measure the token reduction. |
 
-The point of measuring rather than assuming is that **some of these will not pay off
-on these workloads**. A prompt-caching win needs a prefix above the model's minimum
-cacheable size — 512 tokens on Claude Opus 5, 1024 on Opus 4.8, 4096 on Opus 4.6 and
-Haiku 4.5. A short classification system prompt may never cache at all, and reporting
-a saving that did not occur would be worse than reporting none.
+---
 
-## Spend tracking
+## Method
 
-Cost is recorded on every call from the first one, not added later as reporting.
+- Prices come from `ai-core`'s versioned pricing table resolved at today's date,
+  so a lapsed introductory rate is not applied retroactively. Note that
+  `claude-sonnet-5` carries an introductory rate through 2026-08-31; figures
+  dated after that reflect the standard $3/$15.
+- Cache modelling uses the real billing shape: first call writes the prefix at
+  1.25× base input, later calls read at 0.1×, variable input and output billed
+  normally throughout.
+- A prefix below a model's minimum is modelled as **uncached**, because that is
+  what the provider does.
+- Cache minimums are per-model metadata in `ai-core` (`ModelSpec.cache_min_tokens`).
 
-```bash
-playground spend        # per-model totals: calls, tokens, average latency
-```
+## What is still missing
 
-```
-GET /spend              # the same data over HTTP
-```
+Cost is only half the decision. These need an API key:
 
-Both read the SQLite store that the benchmark harness and the UI also write to, so
-there is one number rather than three that disagree.
+- **Accuracy per tier** — is Haiku good enough for these workloads?
+- **Latency p50/p95** — real provider timings.
+- **Exact token counts** — replacing the ~4 chars/token estimate.
+
+Until then this document answers "what would each option cost" but not "which
+should you choose." See [`evaluation.md`](evaluation.md).
